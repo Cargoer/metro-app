@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>交互式地铁图</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+    .station circle { cursor: pointer; }
+    .line path { cursor: pointer; }
+    .popup { font-size: 12px; background-color: white; border: 1px solid #ccc; 
+            padding: 10px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
+    .tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,0.7); 
+               color: white; padding: 5px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>城市地铁图</h1>
+  <div id="map-container"></div>
+  <div id="controls">
+    <button id="reset-view">重置视图</button>
+    <div id="path-finder">
+      <label>起点: <select id="start-station"></select></label>
+      <label>终点: <select id="end-station"></select></label>
+      <button id="find-path">查找路径</button>
+    </div>
+  </div>
+
+  <script>
+    // 示例数据 - 简化版北京地铁
+    const subwayData = {
+      lines: [
+        {
+          id: "line1",
+          name: "1号线",
+          color: "#E63946",
+          stations: [
+            { id: "s101", name: "苹果园", x: 100, y: 200 },
+            { id: "s102", name: "古城", x: 150, y: 200 },
+            { id: "s103", name: "八角游乐园", x: 200, y: 200 },
+            { id: "s104", name: "八宝山", x: 250, y: 200 },
+            { id: "s105", name: "玉泉路", x: 300, y: 200 },
+            { id: "s106", name: "五棵松", x: 350, y: 200 },
+            { id: "s107", name: "万寿路", x: 400, y: 200 },
+            { id: "s108", name: "公主坟", x: 450, y: 200 },
+            { id: "s109", name: "军事博物馆", x: 500, y: 200 }
+          ]
+        },
+        {
+          id: "line2",
+          name: "2号线",
+          color: "#1D3557",
+          stations: [
+            { id: "s201", name: "西直门", x: 300, y: 100 },
+            { id: "s202", name: "车公庄", x: 300, y: 150 },
+            { id: "s203", name: "阜成门", x: 300, y: 200 },
+            { id: "s204", name: "复兴门", x: 300, y: 250 },
+            { id: "s205", name: "长椿街", x: 300, y: 300 },
+            { id: "s206", name: "宣武门", x: 300, y: 350 },
+            { id: "s207", name: "和平门", x: 300, y: 400 },
+            { id: "s208", name: "前门", x: 300, y: 450 }
+          ]
+        },
+        {
+          id: "line5",
+          name: "5号线",
+          color: "#FFB703",
+          stations: [
+            { id: "s501", name: "宋家庄", x: 450, y: 500 },
+            { id: "s502", name: "刘家窑", x: 450, y: 450 },
+            { id: "s503", name: "蒲黄榆", x: 450, y: 400 },
+            { id: "s504", name: "天坛东门", x: 450, y: 350 },
+            { id: "s505", name: "崇文门", x: 450, y: 300 },
+            { id: "s506", name: "东单", x: 450, y: 250 },
+            { id: "s507", name: "灯市口", x: 450, y: 200 },
+            { id: "s508", name: "东四", x: 450, y: 150 },
+            { id: "s509", name: "张自忠路", x: 450, y: 100 }
+          ]
+        }
+      ],
+      transfers: [
+        { stationId: "s108", lineIds: ["line1", "line2"] }, // 公主坟
+        { stationId: "s204", lineIds: ["line2", "line1"] }, // 复兴门
+        { stationId: "s207", lineIds: ["line2", "line5"] }  // 和平门
+      ]
+    };
+
+    // 创建SVG容器
+    const width = 800;
+    const height = 600;
+    
+    const svg = d3.select("#map-container")
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .attr("viewBox", "0 0 800 600");
+    
+    const g = svg.append("g");
+    
+    // 创建缩放和平移功能
+    const zoom = d3.zoom()
+      .scaleExtent([0.5, 5])
+      .on("zoom", function(event) {
+        g.attr("transform", event.transform);
+      });
+    
+    svg.call(zoom);
+    
+    // 辅助函数：生成线路路径
+    function generateLinePath(stations) {
+      return stations.reduce((path, station, index) => {
+        if (index === 0) {
+          return `M${station.x},${station.y}`;
+        } else {
+          return `${path} L${station.x},${station.y}`;
+        }
+      }, '');
+    }
+    
+    // 辅助函数：获取所有站点
+    function getAllStations() {
+      return subwayData.lines.flatMap(line => 
+        line.stations.map(station => ({...station, lineId: line.id}))
+      );
+    }
+    
+    // 辅助函数：判断站点是否为换乘站
+    function isTransferStation(stationId) {
+      return subwayData.transfers.some(transfer => 
+        transfer.stationId === stationId
+      );
+    }
+    
+    // 辅助函数：获取站点的线条颜色
+    function getStationStrokeColor(station) {
+      if (isTransferStation(station.id)) {
+        return "#FFD700"; // 换乘站用金色标记
+      }
+      return subwayData.lines.find(line => line.id === station.lineId).color;
+    }
+    
+    // 渲染线路
+    const lines = g.selectAll(".line")
+      .data(subwayData.lines)
+      .enter()
+      .append("g")
+      .attr("class", "line");
+    
+    lines.append("path")
+      .attr("d", d => generateLinePath(d.stations))
+      .attr("stroke", d => d.color)
+      .attr("stroke-width", 5)
+      .attr("fill", "none")
+      .attr("stroke-linecap", "round")
+      .attr("stroke-linejoin", "round");
+    
+    // 添加线路标签
+    lines.append("text")
+      .attr("x", d => {
+        const midPoint = d.stations[Math.floor(d.stations.length / 2)];
+        return midPoint.x;
+      })
+      .attr("y", d => {
+        const midPoint = d.stations[Math.floor(d.stations.length / 2)];
+        return midPoint.y - 15;
+      })
+      .attr("text-anchor", "middle")
+      .attr("fill", d => d.color)
+      .attr("font-weight", "bold")
+      .text(d => d.name);
+    
+    // 渲染站点
+    const stations = g.selectAll(".station")
+      .data(getAllStations())
+      .enter()
+      .append("g")
+      .attr("class", "station")
+      .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    
+    stations.append("circle")
+      .attr("r", 8)
+      .attr("fill", "white")
+      .attr("stroke", d => getStationStrokeColor(d))
+      .attr("stroke-width", 2);
+    
+    // 添加站点标签
+    stations.append("text")
+      .attr("x", 15)
+      .attr("y", 4)
+      .attr("fill", "#333")
+      .attr("font-size", "12px")
+      .text(d => d.name);
+    
+    // 添加站点交互
+    let tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+    
+    stations.on("mouseover", function(event, d) {
+      d3.select(this).select("circle")
+        .transition()
+        .duration(200)
+        .attr("r", 10)
+        .attr("stroke-width", 3);
+      
+      tooltip.transition()
+        .duration(200)
+        .style("opacity", 0.9);
+      
+      tooltip.html(`<strong>${d.name}</strong><br>所属线路: ${getLineName(d.lineId)}`)
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseout", function(event, d) {
+      d3.select(this).select("circle")
+        .transition()
+        .duration(200)
+        .attr("r", 8)
+        .attr("stroke-width", 2);
+      
+      tooltip.transition()
+        .duration(500)
+        .style("opacity", 0);
+    })
+    .on("click", function(event, d) {
+      // 高亮选中的站点
+      stations.select("circle")
+        .attr("fill", "white");
+      
+      d3.select(this).select("circle")
+        .attr("fill", "#FFD700");
+      
+      // 更新起点/终点选择
+      if (!document.getElementById("start-station").value) {
+        document.getElementById("start-station").value = d.id;
+      } else if (!document.getElementById("end-station").value && d.id !== document.getElementById("start-station").value) {
+        document.getElementById("end-station").value = d.id;
+      } else {
+        document.getElementById("start-station").value = d.id;
+        document.getElementById("end-station").value = "";
+      }
+    });
+    
+    // 辅助函数：获取线路名称
+    function getLineName(lineId) {
+      return subwayData.lines.find(line => line.id === lineId).name;
+    }
+    
+    // 填充站点选择下拉框
+    function populateStationSelectors() {
+      const allStations = getAllStations();
+      const startSelect = d3.select("#start-station");
+      const endSelect = d3.select("#end-station");
+      
+      const options = startSelect.selectAll("option")
+        .data(allStations)
+        .enter()
+        .append("option")
+        .attr("value", d => d.id)
+        .text(d => `${d.name} (${getLineName(d.lineId)})`);
+      
+      endSelect.html(startSelect.html());
+    }
+    
+    populateStationSelectors();
+    
+    // 路径规划功能
+    document.getElementById("find-path").addEventListener("click", function() {
+      const startId = document.getElementById("start-station").value;
+      const endId = document.getElementById("end-station").value;
+      
+      if (!startId || !endId || startId === endId) {
+        alert("请选择不同的起点和终点");
+        return;
+      }
+      
+      // 这里简化处理，实际项目中应该使用图算法计算最短路径
+      const path = findShortestPath(startId, endId);
+      highlightPath(path);
+    });
+    
+    // 重置视图按钮
+    document.getElementById("reset-view").addEventListener("click", function() {
+      svg.transition()
+        .duration(750)
+        .call(zoom.transform, d3.zoomIdentity);
+    });
+    
+    // 简化版路径查找算法
+    function findShortestPath(startId, endId) {
+      // 在实际应用中，这应该是一个使用Dijkstra或A*算法的真实路径查找
+      // 这里为简化示例，我们假设可以直接找到路径
+      
+      const startStation = getAllStations().find(s => s.id === startId);
+      const endStation = getAllStations().find(s => s.id === endId);
+      
+      // 如果起点和终点在同一条线路上
+      if (startStation.lineId === endStation.lineId) {
+        const line = subwayData.lines.find(l => l.id === startStation.lineId);
+        const startIndex = line.stations.findIndex(s => s.id === startId);
+        const endIndex = line.stations.findIndex(s => s.id === endId);
+        
+        const pathStations = [];
+        if (startIndex < endIndex) {
+          for (let i = startIndex; i <= endIndex; i++) {
+            pathStations.push({...line.stations[i], lineId: line.id});
+          }
+        } else {
+          for (let i = startIndex; i >= endIndex; i--) {
+            pathStations.push({...line.stations[i], lineId: line.id});
+          }
+        }
+        
+        return {
+          stations: pathStations,
+          lines: [line]
+        };
+      } else {
+        // 处理换乘情况 - 简化版
+        // 找到一个换乘站
+        const transfer = subwayData.transfers.find(t => 
+          t.lineIds.includes(startStation.lineId) && 
+          t.lineIds.some(lid => subwayData.lines.find(l => l.id === lid).stations.some(s => s.id === endId))
+        );
+        
+        if (transfer) {
+          // 路径分为两段：起点到换乘站，换乘站到终点
+          const startLine = subwayData.lines.find(l => l.id === startStation.lineId);
+          const endLine = subwayData.lines.find(l => 
+            l.id !== startLine.id && 
+            l.stations.some(s => s.id === endId) && 
+            l.id === transfer.lineIds.find(lid => lid !== startLine.id)
+          );
+          
+          // 第一段：起点到换乘站
+          const startIndex = startLine.stations.findIndex(s => s.id === startId);
+          const transferIndex = startLine.stations.findIndex(s => s.id === transfer.stationId);
+          
+          const pathStations1 = [];
+          if (startIndex < transferIndex) {
+            for (let i = startIndex; i <= transferIndex; i++) {
+              pathStations1.push({...startLine.stations[i], lineId: startLine.id});
+            }
+          } else {
+            for (let i = startIndex; i >= transferIndex; i--) {
+              pathStations1.push({...startLine.stations[i], lineId: startLine.id});
+            }
+          }
+          
+          // 第二段：换乘站到终点
+          const transferIndex2 = endLine.stations.findIndex(s => s.id === transfer.stationId);
+          const endIndex = endLine.stations.findIndex(s => s.id === endId);
+          
+          const pathStations2 = [];
+          if (transferIndex2 < endIndex) {
+            for (let i = transferIndex2; i <= endIndex; i++) {
+              pathStations2.push({...endLine.stations[i], lineId: endLine.id});
+            }
+          } else {
+            for (let i = transferIndex2; i >= endIndex; i--) {
+              pathStations2.push({...endLine.stations[i], lineId: endLine.id});
+            }
+          }
+          
+          // 合并两段路径（去掉重复的换乘站）
+          pathStations1.pop();
+          const pathStations = [...pathStations1, ...pathStations2];
+          
+          return {
+            stations: pathStations,
+            lines: [startLine, endLine]
+          };
+        }
+      }
+      
+      // 默认返回起点和终点
+      return {
+        stations: [startStation, endStation],
+        lines: [subwayData.lines.find(l => l.id === startStation.lineId)]
+      };
+    }
+    
+    // 高亮显示路径
+    function highlightPath(path) {
+      // 清除之前的高亮
+      svg.selectAll(".path-highlight").remove();
+      
+      if (!path || !path.stations || path.stations.length < 2) return;
+      
+      const gHighlight = g.append("g").attr("class", "path-highlight");
+      
+      // 高亮路径线路
+      const pathData = path.stations.reduce((acc, station, index) => {
+        if (index > 0) {
+          const prevStation = path.stations[index - 1];
+          if (prevStation.lineId === station.lineId) {
+            acc.push({
+              lineId: station.lineId,
+              from: prevStation,
+              to: station
+            });
+          }
+        }
+        return acc;
+      }, []);
+      
+      pathData.forEach(segment => {
+        const lineColor = subwayData.lines.find(l => l.id === segment.lineId).color;
+        
+        gHighlight.append("path")
+          .attr("d", `M${segment.from.x},${segment.from.y} L${segment.to.x},${segment.to.y}`)
+          .attr("stroke", lineColor)
+          .attr("stroke-width", 8)
+          .attr("fill", "none")
+          .attr("stroke-linecap", "round")
+          .attr("stroke-linejoin", "round")
+          .attr("opacity", 0.7);
+      });
+      
+      // 高亮路径站点
+      path.stations.forEach(station => {
+        gHighlight.append("circle")
+          .attr("cx", station.x)
+          .attr("cy", station.y)
+          .attr("r", 10)
+          .attr("fill", "#FFD700")
+          .attr("stroke", getStationStrokeColor(station))
+          .attr("stroke-width", 3);
+      });
+      
+      // 显示路径信息
+      let pathInfo = "推荐路线：";
+      let currentLine = path.stations[0].lineId;
+      let currentLineStations = [path.stations[0].name];
+      
+      path.stations.slice(1).forEach(station => {
+        if (station.lineId !== currentLine) {
+          pathInfo += `${getLineName(currentLine)} (${currentLineStations.join(" → ")}) → 换乘 → `;
+          currentLine = station.lineId;
+          currentLineStations = [station.name];
+        } else {
+          currentLineStations.push(station.name);
+        }
+      });
+      
+      pathInfo += `${getLineName(currentLine)} (${currentLineStations.join(" → ")})`;
+      
+      // 创建路径信息弹窗
+      const infoBox = gHighlight.append("foreignObject")
+        .attr("x", 50)
+        .attr("y", 50)
+        .attr("width", 300)
+        .attr("height", 100)
+        .attr("class", "popup");
+      
+      infoBox.append("xhtml:div")
+        .html(`<strong>推荐路线：</strong><br>${pathInfo}`);
+    }
+  </script>
+</body>
+</html>
+    
