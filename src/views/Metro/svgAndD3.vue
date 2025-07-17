@@ -1,17 +1,85 @@
 <template>
   <div class="metro-page">
     <div ref="container" id="svg-container"></div>
-    <div class="selection">
-
+    <div class="metro-info fr">
+      <img :src="logo.metro[selectedMetro]" alt="METRO-LOGO">
+      <div class="title">地铁示意图</div>
     </div>
+    <div class="selection-area fr">
+      <BlockSelect
+        :options="gzMetroData.lines"
+        v-model="selectedLines"
+        @changeVisible="drawMapBySelection($event, 1)"
+        @changeInvisible="drawMapBySelection($event, 0)"
+      />
+      <BlockSelect
+        :options="gzMetroData.coveredDistricts"
+        v-model="selectedDistricts"
+        @changeVisible="drawMapBySelection($event, 1)"
+        @changeInvisible="drawMapBySelection($event, 0)"
+      />
+    </div>
+    <div class="author-info fr">
+      <div v-for="(item, index) in authorInfo" :key="'a' + index" class="fr" style="align-items: center;">
+        <div class="text fc" style="justify-content: flex-end;">
+          <div class="title">{{ item.title }}</div>
+          <div class="sub-title">{{ item.subTitle }}</div>
+        </div>
+        <div class="qr-codes fr">
+          <div v-for="(qrCode, qIndex) in item.qrCodes" :key="'q' + qIndex" class="fc" style="gap: 4px; align-items: center;">
+            <img :src="qrCode.imgUrl" :alt="qrCode.name">
+            <div class="name">{{ qrCode.name }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
   </div>
 </template>
 
 <script setup>
 import * as d3 from 'd3'
 import gzMetroData from '@/data/gzMetroData.js'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import BlockSelect from '@/components/BlockSelect.vue'
+import logo from '@/data/logo.js'
 
+// 作者信息
+const authorInfo = [
+  {
+    title: '纠错&交流',
+    subTitle: '关注并私信作者',
+    qrCodes: [
+      { name: '小红书', imgUrl: '/src/data/image/xhs.jpg' },
+      { name: 'bilibili', imgUrl: '/src/data/image/bilibili.jpg' },
+    ]
+  },
+  {
+    title: '鼓励作者',
+    subTitle: '谢谢你的喜欢',
+    qrCodes: [
+      { name: '微信赞赏码', imgUrl: '/src/data/image/reward.jpg' },
+    ]
+  },
+]
+
+// 地铁信息相关
+const selectedMetro = ref('gz')
+// 动态导入所有SVG文件（立即加载）
+const svgModules = import.meta.glob('@/data/logo/*.svg', { eager: true });
+const svgComponent = computed(() => {
+  return svgModules[`@/data/logo/${selectedMetro.value}MetroLogo.svg`]?.default || null;
+})
+
+// 控制筛选相关
+const selectedLines = ref(gzMetroData.lines.map(v => v))
+const selectedDistricts = ref(gzMetroData.coveredDistricts.map(v => v))
+
+function drawMapBySelection (selector, opacity) {
+  d3.selectAll(selector).transition().duration(200).attr('opacity', opacity)
+}
+
+// 请求数据相关
 import { Base } from 'seatable-api'
 
 const config = {
@@ -20,6 +88,12 @@ const config = {
 };
 
 const base = new Base(config)
+
+async function getMetroData() {
+  await base.auth()
+  const stations = await base.listRows('gzMetroStations')
+  gzMetroData.stations = stations
+}
 
 // 辅助函数：生成线路路径 TODO 使拐点变得圆润
 function generateLinePath(points, ratio=1, isCircle=false) {
@@ -39,26 +113,8 @@ function generateLinePath(points, ratio=1, isCircle=false) {
 }
 
 function getStationStrokeColor(station) {
+  if (station.lines.length > 1) return '#0F0F0F'
   return gzMetroData.lines.find(line => line.id === station.lines[0]).color;
-}
-
-function getStationNameOffset(station) {
-  if (!station.namePos) return { x: 8, y: 4 }
-  let x = - (station.name.length * 8 / 2)
-  let y = 4
-  if (station.namePos.includes('right')) {
-    x += (8 + station.name.length * 8 / 2)
-  }
-  if (station.namePos.includes('left')) {
-    x -= (8 + station.name.length * 8 / 2)
-  }
-  if (station.namePos.includes('top')) {
-    y -= 12
-  }
-  if (station.namePos.includes('bottom')) {
-    y += 12
-  }
-  return { x, y }
 }
 
 function drawMetroMap(metroData) {
@@ -108,7 +164,7 @@ function drawMetroMap(metroData) {
       .data(metroData.lines)
       .enter()
       .append("g")
-      .attr("class", "line");
+      .attr("class", d => `line ${d.id}`);
 
     lines.append("path")
       .attr("d", d => generateLinePath(d.points, ratio, d.isCircle))
@@ -116,14 +172,15 @@ function drawMetroMap(metroData) {
       .attr("stroke-width", 5)
       .attr("fill", "none")
       .attr("stroke-linecap", "round")
-      .attr("stroke-linejoin", "round");
+      .attr("stroke-linejoin", "round")
+      .attr("class", d => `${d.id}`);
 
     // 渲染站点
     const stations = g.selectAll(".station")
       .data(metroData.stations)
       .enter()
       .append("g")
-      .attr("class", "station")
+      .attr("class", d => `station ${d.lines.join(' ')} ${d.district}`)
       .attr("transform", d => `translate(${d.x * ratio}, ${d.y * ratio})`);
     
     stations.append("circle")
@@ -134,8 +191,8 @@ function drawMetroMap(metroData) {
     
     // 添加站点标签
     stations.append("text")
-      .attr("x", d => getStationNameOffset(d).x)
-      .attr("y", d => getStationNameOffset(d).y)
+      .attr("x", "8px")
+      .attr("y", "8px")
       .attr("fill", "#333")
       .attr("font-size", "8px")
       .text(d => d.name);
@@ -176,8 +233,7 @@ function drawMetroMap(metroData) {
 }
 
 onMounted(async () => {
-  // await base.auth()
-  // await base.batchAppendRows('gzMetroStations', gzMetroData.stations)
+  await getMetroData()
   drawMetroMap(gzMetroData);
 })
 </script>
@@ -186,6 +242,81 @@ onMounted(async () => {
 * {
   box-sizing: border-box;
 }
+.fr {
+  display: flex;
+  gap: 10px;
+}
+.fc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.selection-area {
+  position: absolute;
+  top: 70px;
+  left: 10px;
+  margin-top: 10px;
+}
+
+.metro-info {
+  position: absolute;
+  height: 60px;
+  top: 10px;
+  left: 10px;
+  background: rgba(243, 246, 247, 0.7);
+  padding: 10px;
+  border-radius: 6px;
+  align-items: center;
+  box-shadow: 0 0 10px rgba(75, 142, 188, 0.4);
+
+  .title {
+    font-size: 24px;
+    color: rgb(37, 36, 36);
+    font-weight: 500;
+  }
+}
+
+.author-info {
+  position: absolute;
+  // height: 100px;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(243, 246, 247, 0.7);
+  padding: 10px;
+  border-radius: 6px;
+  align-items: center;
+  box-shadow: 0 0 10px rgba(75, 142, 188, 0.4);
+  align-items: center;
+  gap: 10px;
+
+  .text {
+    .title {
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .sub-title {
+      font-size: 14px;
+      font-weight: 400;
+      color: #aaa;
+    }
+  }
+
+  .qr-codes {
+    gap: 10px;
+    --qr-code-size: 80px;
+    img {
+      width: var(--qr-code-size);
+      height: var(--qr-code-size);
+      border-radius: 6px;
+    }
+    .name {
+      font-size: 12px;
+      font-weight: 400;
+      color: #aaa;
+    }
+  }
+}
+
 #svg-container {
   width: 100vw;
   height: 100vh;
