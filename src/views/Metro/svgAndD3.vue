@@ -56,15 +56,15 @@ const authorInfo = [
     title: '纠错&交流',
     subTitle: '关注并私信作者',
     qrCodes: [
-      { name: '小红书', imgUrl: '/xhs.jpg' },
-      { name: 'bilibili', imgUrl: '/bilibili.jpg' },
+      { name: '小红书', imgUrl: import.meta.env.BASE_URL + 'xhs.jpg' },
+      { name: 'bilibili', imgUrl: import.meta.env.BASE_URL + 'bilibili.jpg' },
     ]
   },
   {
     title: '鼓励作者',
     subTitle: '如果你喜欢的话',
     qrCodes: [
-      { name: '微信赞赏码', imgUrl: '/reward.jpg' },
+      { name: '微信赞赏码', imgUrl: import.meta.env.BASE_URL + 'reward.jpg' },
     ]
   },
 ]
