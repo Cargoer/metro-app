@@ -45,20 +45,26 @@ import BlockSelect from '@/components/BlockSelect.vue'
 import logo from '@/data/logo.js'
 
 // 作者信息
+// const images = import.meta.glob('@/assets/*.png', { eager: true });
+// const logo = images['@/assets/logo.png'].default;
+const rightUrl = computed(() => {
+  return (url) => (new URL(url, import.meta.url).href)
+})
+
 const authorInfo = [
   {
     title: '纠错&交流',
     subTitle: '关注并私信作者',
     qrCodes: [
-      { name: '小红书', imgUrl: '/src/data/image/xhs.jpg' },
-      { name: 'bilibili', imgUrl: '/src/data/image/bilibili.jpg' },
+      { name: '小红书', imgUrl: '/xhs.jpg' },
+      { name: 'bilibili', imgUrl: '/bilibili.jpg' },
     ]
   },
   {
     title: '鼓励作者',
-    subTitle: '谢谢你的喜欢',
+    subTitle: '如果你喜欢的话',
     qrCodes: [
-      { name: '微信赞赏码', imgUrl: '/src/data/image/reward.jpg' },
+      { name: '微信赞赏码', imgUrl: '/reward.jpg' },
     ]
   },
 ]
@@ -84,7 +90,7 @@ import { Base } from 'seatable-api'
 
 const config = {
   server: 'https://cloud.seatable.cn',
-  APIToken: '3cfcf75b0a69a55d420dac94bf364bf779b67b31'
+  APIToken: 'NOT USE'
 };
 
 const base = new Base(config)
@@ -233,7 +239,7 @@ function drawMetroMap(metroData) {
 }
 
 onMounted(async () => {
-  await getMetroData()
+  // await getMetroData()
   drawMetroMap(gzMetroData);
 })
 </script>
