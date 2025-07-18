@@ -83,6 +83,7 @@ function toggleItemSelection (option) {
   gap: 10px;
 }
 .selections {
+  display: flex;
   background: rgba(255, 255, 255, 0.7);
   padding: 10px;
   max-height: calc(100vh - 90px);
@@ -98,6 +99,25 @@ function toggleItemSelection (option) {
     border: 2px solid #F6F6F6;
     cursor: pointer;
     overflow: hidden;
+  }
+}
+
+@media screen and (max-width: 500px) {
+  .selections {
+    display: flex;
+    flex-direction: row !important;
+    // background: #000 !important;
+    gap: none;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: calc(100vw - 20px);
+    .selection {
+      width: 8vw;
+      height: 8vw;
+      line-height: 8vw;
+      font-size: 3vw;
+      flex-shrink: 0;
+    }
   }
 }
 

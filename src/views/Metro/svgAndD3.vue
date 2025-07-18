@@ -20,7 +20,7 @@
       />
     </div>
     <div class="author-info fr">
-      <div v-for="(item, index) in authorInfo" :key="'a' + index" class="fr" style="align-items: center;">
+      <div v-for="(item, index) in authorInfo" :key="'a' + index" class="fr author-item" style="align-items: center;">
         <div class="text fc" style="justify-content: flex-end;">
           <div class="title">{{ item.title }}</div>
           <div class="sub-title">{{ item.subTitle }}</div>
@@ -331,5 +331,30 @@ onMounted(async () => {
   border: none;
   overflow: hidden; /* 隐藏溢出内容 */
   background: #F6F6F6;
+}
+
+@media screen and (max-width: 500px) {
+  .selection-area {
+    flex-direction: column !important;
+  }
+  .author-item {
+    flex-direction: column;
+    .text {
+      .title {
+        font-size: 14px;
+      }
+    }
+    
+    .sub-title {
+      display: none;
+    }
+    .qr-codes {
+      img {
+        width: 60px;
+        height: 60px;
+      }
+    }
+  }
+  
 }
 </style>
