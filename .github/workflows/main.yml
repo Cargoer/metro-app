@@ -1,0 +1,32 @@
+name: Deploy Vite + Vue3 to GitHub Pages
+
+# 触发条件：当推送到 main 分支时自动部署
+on:
+  push:
+    branches: [ "main" ]  # 若你的主分支是 master，改为 "master"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4  # 拉取仓库代码
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20  # 匹配你本地的 Node 版本（如 18/20）
+          cache: 'npm'      # 缓存依赖，加速构建
+
+      - name: 安装依赖
+        run: npm ci  # 比 npm install 更严格，确保依赖版本一致
+
+      - name: 构建项目
+        run: npm run build  # 执行 Vite 的构建命令（确保 package.json 中有 "build": "vite build"）
+
+      - name: 部署到 GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4  # 最常用的 GitHub Pages 部署工具
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}  # 自动生成的令牌，无需手动配置
+          publish_dir: ./dist  # 部署 Vite 构建后的 dist 目录
+          # 可选：若需要强制推送（覆盖历史），添加 force_orphan: true
