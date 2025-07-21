@@ -4,10 +4,10 @@ import path from 'path'
 import svgLoader from 'vite-svg-loader'
 
 // https://vite.dev/config/
-export default defineConfig(({ platform }) => {
+export default defineConfig(({ mode }) => {
   // 根据环境变量动态设置 base
-  console.log('platform:', platform)
-  const base = platform === 'github' 
+  console.log('mode:', mode)
+  const base = mode === 'github' 
     ? '/metro-app/'      // 生产环境使用 GitHub Pages 子路径
     : '/' 
   return {
