@@ -15,7 +15,7 @@ jobs:
           node-version: 18
       - run: npm cache clean --force
       - run: npm install
-      - run: npm run build -- --mode production
+      - run: npm run build -- --platform github
       - name: Check build output
         run: |
           echo "构建后的 index.html:"
