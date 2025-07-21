@@ -177,9 +177,10 @@ function drawMetroMap(metroData) {
       .attr("stroke", d => d.color)
       .attr("stroke-width", 5)
       .attr("fill", "none")
+      .attr("offset", 30)
       .attr("stroke-linecap", "round")
       .attr("stroke-linejoin", "round")
-      .attr("class", d => `${d.id}`);
+      .attr("id", d => `${d.id}`);
 
     // 渲染站点
     const stations = g.selectAll(".station")
@@ -187,6 +188,7 @@ function drawMetroMap(metroData) {
       .enter()
       .append("g")
       .attr("class", d => `station ${d.lines.join(' ')} ${d.district}`)
+      .attr("id", d => `${d.id}`)
       .attr("transform", d => `translate(${d.x * ratio}, ${d.y * ratio})`);
     
     stations.append("circle")
@@ -238,9 +240,24 @@ function drawMetroMap(metroData) {
   svg.attr("viewBox", `${x - 10} ${y - 10} ${cw + 20} ${ch + 20}`);
 }
 
+// 函数，路径动态演示
+function playLineAnimation(lineId) {
+  const line = d3.select(`#${lineId}`);
+  // const path = line.select("path");
+  const length = line.node().getTotalLength();
+  line.attr("stroke-dasharray", length)
+    .attr("stroke-dashoffset", length)
+    .transition()
+    .duration(2000)
+    .attr("stroke-dashoffset", 0);
+}
+
 onMounted(async () => {
   // await getMetroData()
   drawMetroMap(gzMetroData);
+  // gzMetroData.lines.map(v => v.id).forEach(lineId => {
+  //   playLineAnimation(lineId);
+  // })
 })
 </script>
 
